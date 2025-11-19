@@ -1,20 +1,19 @@
 const express = require('express');
-const app = express();
+const fs = require('fs');
+const { Client, GatewayIntentBits, Collection } = require("discord.js");
 
-// Gunakan port yang disediakan Koyeb atau default 8000
+const app = express();
 const port = process.env.PORT || 8000;
 
-// Endpoint root untuk health check
 app.get('/', (req, res) => {
   res.send('Bot Lan Lan Manager is running!');
 });
 
-// Jalankan server
 app.listen(port, () => {
   console.log(`HTTP server running on port ${port}`);
 });
-const { Client, GatewayIntentBits } = require("discord.js");
 
+// Discord bot
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -23,17 +22,36 @@ const client = new Client({
     ]
 });
 
-// Token diambil dari environment, bukan ditulis langsung
-client.login(process.env.TOKEN);
+// Command handler
+client.commands = new Collection();
+const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
+for (const file of commandFiles) {
+    const command = require(`./commands/${file}`);
+    client.commands.set(command.name, command);
+}
 
 client.on("ready", () => {
     console.log(`Bot aktif sebagai ${client.user.tag}`);
 });
 
-client.on("messageCreate", (message) => {
+client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
 
-    if (message.content === "!ping") {
-        message.reply("Pong!");
+    const prefix = "!";
+    if (!message.content.startsWith(prefix)) return;
+
+    const args = message.content.slice(prefix.length).trim().split(/ +/);
+    const commandName = args.shift().toLowerCase();
+
+    if (!client.commands.has(commandName)) return;
+
+    try {
+        await client.commands.get(commandName).execute(message, args, client);
+    } catch (error) {
+        console.error(error);
+        message.reply("Terjadi kesalahan saat menjalankan perintah ini.");
     }
 });
+
+client.login(process.env.TOKEN);
+
